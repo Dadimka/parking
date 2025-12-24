@@ -1,0 +1,34 @@
+# Test dependencies only - no heavy packages like torch/opencv
+
+# FastAPI and server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# Database
+sqlalchemy==2.0.35
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Pydantic
+pydantic==2.9.2
+pydantic-settings==2.6.0
+
+# TaskIQ for async tasks
+taskiq==0.11.7
+
+# Geometry
+shapely==2.0.6
+
+# Utilities
+python-dateutil==2.9.0
+aiofiles==24.1.0
+
+# Development and Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+httpx==0.27.2
+black==24.10.0
+flake8==7.1.1
+mypy==1.13.0
