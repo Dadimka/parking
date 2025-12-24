@@ -1,0 +1,138 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: parking_monitoring_test
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/parking_monitoring_test
+  SYNC_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/parking_monitoring_test
+  DB_HOST: localhost
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        check: [flake8, mypy, format]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-lint-${{ hashFiles('**/requirements-test.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-lint-
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+    
+    - name: Run flake8
+      if: matrix.check == 'flake8'
+      run: |
+        cd backend
+        flake8 app tests --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 app tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run mypy
+      if: matrix.check == 'mypy'
+      run: |
+        cd backend
+        pip install sqlalchemy types-asyncpg
+        mypy app --ignore-missing-imports --no-strict-optional --allow-redefinition || true
+      continue-on-error: true
+    
+    - name: Check formatting with black
+      if: matrix.check == 'format'
+      run: |
+        cd backend
+        black --check app tests
+    
+
+  test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: parking_monitoring_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-test-${{ hashFiles('**/requirements-test.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-test-
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+    
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -U postgres; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+      env:
+        PGPASSWORD: postgres
+    
+    - name: Run tests with coverage
+      run: |
+        cd backend
+        pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=term
+      env:
+        DB_HOST: localhost
+        DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/parking_monitoring_test
+        SYNC_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/parking_monitoring_test
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./backend/coverage.xml
+        flags: backend
+        name: backend-coverage
+        fail_ci_if_error: false
